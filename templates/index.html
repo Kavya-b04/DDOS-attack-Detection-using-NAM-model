@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AnomalyNet - DDoS Detection</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0f172a;
+      color: #f1f5f9;
+      padding: 20px;
+      margin: 0;
+      transition: background 0.3s, color 0.3s;
+    }
+
+    .container {
+      background: #1e293b;
+      padding: 30px;
+      border-radius: 16px;
+      max-width: 800px;
+      margin: auto;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+      animation: fadeInUp 0.8s ease-out;
+    }
+
+    h1, h2, h3 {
+      text-align: center;
+    }
+
+    input, button {
+      margin-top: 10px;
+      width: 100%;
+      padding: 12px;
+      font-size: 1em;
+      border-radius: 8px;
+      border: none;
+      outline: none;
+      transition: 0.3s;
+    }
+
+    input {
+      background: #334155;
+      color: #f8fafc;
+    }
+
+    button {
+      background: #14b8a6;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #0d9488;
+    }
+
+    #result {
+      font-size: 1.2em;
+      margin-top: 20px;
+      text-align: center;
+    }
+
+    canvas {
+      width: 100% !important;
+      height: 300px !important;
+      margin-top: 30px;
+    }
+
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(40px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Light mode styles */
+    body.light-mode {
+      background: #f4f4f4;
+      color: #222;
+    }
+
+    body.light-mode .container {
+      background: #fff;
+      color: #111;
+    }
+
+    body.light-mode input {
+      background: #e5e7eb;
+      color: #111;
+    }
+
+    body.light-mode button {
+      background: #0ea5e9;
+    }
+
+    body.light-mode #result {
+      color: #222;
+    }
+
+    .theme-toggle {
+      text-align: right;
+      margin-bottom: 10px;
+      font-size: 0.9em;
+    }
+  </style>
+</head>
+<body>
+  <div class="theme-toggle">
+    <button id="themeToggle" style="background:none; border:none; cursor:pointer; font-size: 1.4em;" title="Toggle Theme">🌙</button>
+  </div>
+  
+
+  <div class="container">
+    <div style="text-align:center; margin-bottom: 20px;">
+      <img src="https://img.icons8.com/fluency/96/security-checked.png" alt="Cybersecurity Logo" style="width:60px;">
+      <h1 style="color:#22d3ee; font-size: 2em; margin: 10px 0 5px;">AnomalyNet</h1>
+      <p style="color: #94a3b8;">AI-Powered DDoS Detection System</p>
+    </div>
+
+    <form id="featuresForm">
+      <input type="number" step="any" id="f1" placeholder="Flow Duration" required>
+      <input type="number" step="any" id="f2" placeholder="Total Fwd Packets" required>
+      <input type="number" step="any" id="f3" placeholder="Flow Bytes per Second" required>
+      <input type="number" step="any" id="f4" placeholder="Fwd Packet Length Mean" required>
+      <input type="number" step="any" id="f5" placeholder="SYN Flag Count" required>
+      <button type="submit">🚨 Detect Anomaly</button>
+    </form>
+
+    <div id="result"></div>
+    <canvas id="contributionChart"></canvas>
+    <h3>Live Traffic Features</h3>
+    <canvas id="liveTrafficChart"></canvas>
+  </div>
+
+  <script>
+    let contributionChart, liveTrafficChart;
+
+    const toggleBtn = document.getElementById("themeToggle");
+  toggleBtn.addEventListener("click", () => {
+    document.body.classList.toggle("light-mode");
+    toggleBtn.innerText = document.body.classList.contains("light-mode") ? "🌞" : "🌙";
+});
+
+
+    document.getElementById("featuresForm").addEventListener("submit", async function(event) {
+      event.preventDefault();
+
+      const features = [
+        parseFloat(document.getElementById("f1").value),
+        parseFloat(document.getElementById("f2").value),
+        parseFloat(document.getElementById("f3").value),
+        parseFloat(document.getElementById("f4").value),
+        parseFloat(document.getElementById("f5").value)
+      ];
+
+      try {
+        const response = await fetch("/predict", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ features })
+        });
+
+        const result = await response.json();
+        document.getElementById("result").innerText = result.result_text;
+
+        if (result.contributions) drawContributionChart(result.contributions);
+        if (features) updateLiveTrafficChart({
+          flow_duration: features[0],
+          total_fwd_packets: features[1],
+          flow_bytes_per_second: features[2],
+          fwd_packet_length_mean: features[3],
+          syn_flag_count: features[4]
+        });
+
+      } catch (err) {
+        console.error("Error in prediction:", err);
+      }
+    });
+
+    function drawContributionChart(contributions) {
+      const ctx = document.getElementById("contributionChart").getContext('2d');
+      if (contributionChart) contributionChart.destroy();
+
+      contributionChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: ["Flow Duration", "Total Fwd Packets", "Flow Bytes/s", "Fwd Packet Length Mean", "SYN Flag Count"],
+          datasets: [{
+            label: "Feature Contribution",
+            data: contributions,
+            backgroundColor: contributions.map(c => c >= 0 ? "#10b981" : "#ef4444")
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          scales: {
+            x: { beginAtZero: true }
+          }
+        }
+      });
+    }
+
+    function updateLiveTrafficChart(data) {
+      const ctx = document.getElementById("liveTrafficChart").getContext('2d');
+      const labels = Object.keys(data);
+      const values = Object.values(data);
+
+      if (liveTrafficChart) liveTrafficChart.destroy();
+
+      liveTrafficChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Live Traffic Features',
+            data: values,
+            backgroundColor: '#3b82f6'
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      });
+    }
+  </script>
+</body>
+</html>
